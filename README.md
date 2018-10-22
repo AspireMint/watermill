@@ -10,5 +10,9 @@ Crafting watermill:
 'default:wood', 'default:steel_ingot', 'default:wood'  
 'default:stick', 'default:wood', 'default:stick'  
 
+Dependencies:  
+default  
+mesecon?  
+
 Screenshot:  
 ![Image Watermill](https://raw.githubusercontent.com/AspireMint/watermill/master/screenshot.png)
