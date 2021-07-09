@@ -1,105 +1,179 @@
-local lavamill = false	-- LOL
-local use_abm  = true	-- modify only if use_mesecon is false
-
+local modname = minetest.get_current_modname()
 local use_mesecon = core.global_exists("mesecon")
 
-local bearing_rules = {
-	{x = 1, y = 0, z = 0},
-	{x =-1, y = 0, z = 0},
-	{x = 0, y = 1, z = 0},
-	{x = 0, y =-1, z = 0},
-	{x = 0, y = 0, z = 1},
-	{x = 0, y = 0, z =-1},
+local watermill = {
+	lavamill = false,
+	state = {
+		on = "on",
+		off = "off",
+	}
 }
 
-minetest.register_node("watermill:bearing_3_off", {
-    description = "Watermill bearing 3",
-    inventory_image = "bearing_3.png",
-    tiles = { "default_mossycobble.png^[combine:16x16:0,0=bearing_3.png" },
-	mesecons = {conductor = {
-		state = use_mesecon and mesecon.state.off,
-		onstate = "watermill:bearing_3_on",
-		offstate = "watermill:bearing_3_off",
-		rules = mesewire_rules
-	}},
-	sounds = default.node_sound_metal_defaults(),
-	groups = {cracky=1, oddly_breakable_by_hand=1},
-	on_blast = use_mesecon and mesecon.on_blastnode,
-})
+local get_name = function(name, state)
+	return name.."_"..state
+end
 
-minetest.register_node("watermill:bearing_3_on", {
-    description = "Watermill bearing 3",
-    inventory_image = "bearing_3.png",
-    tiles = { "default_mossycobble.png^[combine:16x16:0,0=bearing_3.png" },
-	mesecons = {conductor = {
-		state = use_mesecon and mesecon.state.on,
-		onstate = "watermill:bearing_3_on",
-		offstate = "watermill:bearing_3_off",
-		rules = mesewire_rules
-	}},
-	sounds = default.node_sound_metal_defaults(),
-	groups = {cracky=1, oddly_breakable_by_hand=1, not_in_creative_inventory=1},
-	on_blast = use_mesecon and mesecon.on_blastnode,
-})
+local get_on_blast = function()
+	return use_mesecon and mesecon.on_blastnode
+end
 
-minetest.register_node("watermill:watermill_3_off", {
-	description = "Watermill 3",
-	drawtype = "mesh",
-	mesh = "watermill_3.obj",
-	inventory_image = "watermill_3_inv.png",
-	wield_image = "watermill_3_inv.png",
-	paramtype2 = "facedir",
-	tiles = {
-		"watermill_3.png^[sheet:1x9:0,8"
-	},
-	groups = {choppy=2, oddly_breakable_by_hand=1, flammable=lavamill and 0 or 1, not_in_creative_inventory=(use_mesecon or use_abm) and 0 or 1},
-	drop = "watermill:watermill_3_".. ((use_mesecon or use_abm) and "off" or "on") .." 1",
-	sounds = default.node_sound_wood_defaults(),
-	mesecons = {receptor = {
-		state = use_mesecon and mesecon.state.off
-	}},
-	on_blast = use_mesecon and mesecon.on_blastnode,
-})
+local get_mesecon_state = function(state)
+	if use_mesecon then
+		if state == watermill.state.on then
+			return mesecon.state.on
+		end
+		if state == watermill.state.off then
+			return mesecon.state.off
+		end
+	end
+	return nil
+end
 
-minetest.register_node("watermill:watermill_3_on", {
-	description = "Watermill 3",
-	drawtype = "mesh",
-	mesh = "watermill_3.obj",
-	inventory_image = "watermill_3_inv.png",
-	wield_image = "watermill_3_inv.png",
-	paramtype2 = "facedir",
-	tiles = {
-		{
-			name = "watermill_3.png",
-			animation = {
-				type = "vertical_frames",
-				aspect_w = 81,
-				aspect_h = 27,
-				length = 5,
-			},
-		},
-	},
-	groups = {choppy=2, oddly_breakable_by_hand=1, flammable=lavamill and 0 or 1, not_in_creative_inventory=(use_mesecon or use_abm) and 1 or 0},
-	drop = "watermill:watermill_3_".. ((use_mesecon or use_abm) and "off" or "on") .." 1",
-	sounds = default.node_sound_wood_defaults(),
-	mesecons = {receptor = {
-		state = use_mesecon and mesecon.state.on
-	}},
-	on_blast = use_mesecon and mesecon.on_blastnode,
-})
+local get_image = function(name)
+	return name:gsub(".*:", "")..".png"
+end
 
-minetest.register_craft({
-	output = "watermill:watermill_3_".. ((use_mesecon or use_abm) and "off" or "on"),
-	recipe = {
-		{'default:stick', 'default:wood', 'default:stick'},
-		{'default:wood', 'default:steel_ingot', 'default:wood'},
-		{'default:stick', 'default:wood', 'default:stick'},
-	}
-})
+local get_inv_image = function(name)
+	return name:gsub(".*:", "").."_inv.png"
+end
 
-if use_mesecon or use_abm then
+local get_mesh = function(name)
+	return name:gsub(".*:", "")..".obj"
+end
+
+local get_bearing_image = function(bgimg)
+	return bgimg.."^[combine:16x16:0,0=bearing.png"
+end
+
+local lbm_replace_node = function(old_name, new_name)
+	minetest.register_lbm({
+		name = modname..":lbm_replace_node_"..old_name:gsub("%:", ""),
+		nodenames = {old_name},
+		action = function(pos, node)
+			minetest.swap_node(pos, {name=new_name, param2=node.param2})
+		end,
+	})
+end
+
+local lbm_replace_watermill_node = function(old_name, new_name)
+	lbm_replace_node(old_name.."_off", get_name(new_name, watermill.state.off))
+	lbm_replace_node(old_name.."_on", get_name(new_name, watermill.state.on))
+end
+lbm_replace_watermill_node("watermill:bearing_3", "watermill:bearing_mossycobble")
+lbm_replace_watermill_node("watermill:watermill_3", "watermill:watermill_3_v1")
+
+local register_bearing_node = function(name, def, def2)
+	def = def or {}
+	def2 = def2 or {}
+	
+	local get_def = function (state)
+		local _def = {
+			description = "Watermill bearing",
+			inventory_image = def.tiles and def.tiles[1] or "bearing.png",
+			tiles = { "bearing.png" },
+			mesecons = {conductor = {
+				state = get_mesecon_state(state),
+				onstate = get_name(name, watermill.state.on),
+				offstate = get_name(name, watermill.state.off),
+				rules = {
+					{x = 1, y = 0, z = 0},
+					{x =-1, y = 0, z = 0},
+					{x = 0, y = 1, z = 0},
+					{x = 0, y =-1, z = 0},
+					{x = 0, y = 0, z = 1},
+					{x = 0, y = 0, z =-1},
+				}
+			}},
+			sounds = default.node_sound_metal_defaults(),
+			groups = {cracky=1, oddly_breakable_by_hand=1},
+			on_blast = get_on_blast(),
+			drop = get_name(name, watermill.state.off).." 1",
+		}
+		
+		for k,v in pairs(def) do
+			_def[k] = v
+		end
+		
+		if state == watermill.state.on then
+			_def.description = nil
+		end
+		
+		return _def
+	end
+	
+	minetest.register_node(get_name(name, watermill.state.off), get_def(watermill.state.off))
+	minetest.register_node(get_name(name, watermill.state.on), get_def(watermill.state.on))
+	
+	if def2.recipe then
+		minetest.register_craft({
+			output = get_name(name, watermill.state.off),
+			recipe = def2.recipe
+		})
+	end
+end
+
+local register_watermill_node = function(name, def, def2)
+	def = def or {}
+	def2 = def2 or {}
+	
+	local watermill_on = get_name(name, watermill.state.on)
+	local watermill_off = get_name(name, watermill.state.off)
+
+	local get_def = function(state)
+		local _def = {
+			description = "Watermill",
+			drawtype = "mesh",
+			mesh = get_mesh(name),
+			paramtype2 = "facedir",
+			inventory_image = get_inv_image(name),
+			wield_image = get_inv_image(name),
+			groups = {choppy=2, oddly_breakable_by_hand=1, flammable=watermill.lavamill and 0 or 1},
+			drop = watermill_off.." 1",
+			sounds = default.node_sound_wood_defaults(),
+			mesecons = {receptor = {
+				state = get_mesecon_state(state)
+			}},
+			on_blast = get_on_blast(),
+		}
+		
+		for k,v in pairs(def) do
+			_def[k] = v
+		end
+		
+		if state == watermill.state.off then
+			_def.tiles = {
+				get_image(name).."^[sheet:1x"..def2.frames..":0,0"
+			}
+		else
+			_def.description = nil
+			_def.tiles = {
+				{
+					name = get_image(name),
+					animation = {
+						type = "vertical_frames",
+						aspect_w = def2.aspect_w,
+						aspect_h = def2.aspect_h,
+						length = def2.length,
+					},
+				},
+			}
+		end
+		
+		return _def
+	end
+	
+	minetest.register_node(watermill_off, get_def(watermill.state.off))
+	minetest.register_node(watermill_on, get_def(watermill.state.on))
+	
+	if def2.recipe then
+		minetest.register_craft({
+			output = watermill_off,
+			recipe = def2.recipe
+		})
+	end
+	
 	minetest.register_abm({
-		nodenames = {"watermill:watermill_3_off"},
+		nodenames = { watermill_off },
 		interval = 1,
 		chance = 1,
 		action = function(pos, node, active_object_count, active_object_count_wider)
@@ -110,7 +184,7 @@ if use_mesecon or use_abm then
 				if flow < 0 then
 					param2 = mod(param2+2, 4)
 				end
-				minetest.set_node(pos, {name="watermill:watermill_3_on", param2 = param2})
+				minetest.set_node(pos, {name=watermill_on, param2 = param2})
 				if use_mesecon then
 					mesecon.receptor_on(pos)
 				end
@@ -118,17 +192,15 @@ if use_mesecon or use_abm then
 		end,
 	})
 	
-	local ONE_TIME = true
-
 	minetest.register_abm({
-		nodenames = {"watermill:watermill_3_on"},
+		nodenames = { watermill_on },
 		interval = 1,
 		chance = 1,
 		action = function(pos, node, active_object_count, active_object_count_wider)	
 			local waterpos={x=pos.x, y=pos.y-1, z=pos.z}
 			local flow = get_flow(pos)
 			if flow == 0 or not can_rotate(pos, 3) then
-				minetest.set_node(pos, {name="watermill:watermill_3_off", param2 = node.param2})
+				minetest.set_node(pos, {name=watermill_off, param2 = node.param2})
 				if use_mesecon then
 					mesecon.receptor_off(pos)
 				end
@@ -136,6 +208,35 @@ if use_mesecon or use_abm then
 		end,
 	})
 end
+
+register_bearing_node("watermill:bearing_mossycobble", {
+	description = "Watermill mossycobble bearing",
+	tiles = { get_bearing_image("default_mossycobble.png") },
+})
+
+register_watermill_node("watermill:watermill_3_v1", { description = "Watermill (r=3)" }, {
+	frames = 9,
+	aspect_w = 3,
+	aspect_h = 1,
+	length = 5,
+	recipe = {
+		{'default:stick', 'default:wood', 'default:stick'},
+		{'default:wood', 'default:steel_ingot', 'default:wood'},
+		{'default:stick', 'default:wood', 'default:stick'},
+	}
+})
+
+register_watermill_node("watermill:watermill_4_v1", { description = "Watermill (r=4)", inventory_image = '', wield_image = '' }, {
+	frames = 3,
+	aspect_w = 54,
+	aspect_h = 16,
+	length = 2,
+	recipe = {
+		{'default:stick', 'default:tree', 'default:stick'},
+		{'default:tree', 'default:steel_ingot', 'default:tree'},
+		{'default:stick', 'default:tree', 'default:stick'},
+	}
+})
 
 can_rotate = function(pos, d)
 	local wmd = get_watermill_dir(pos)
